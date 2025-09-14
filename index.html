@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>One-Time Secret Sharing</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* A little extra style for transitions */
+        .transition-all { transition: all 0.3s ease-in-out; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200 flex items-center justify-center min-h-screen font-sans">
+
+    <div id="app" class="w-full max-w-lg mx-auto p-8 bg-gray-800 rounded-lg shadow-xl">
+
+        <div id="create-view">
+            <h1 class="text-3xl font-bold mb-2 text-white">Share a Secret</h1>
+            <p class="mb-6 text-gray-400">The link will work only once and then self-destruct.</p>
+            
+            <textarea id="secret-input" class="w-full h-40 p-3 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-200 resize-none" placeholder="Type your secret message here..."></textarea>
+            
+            <button id="create-btn" class="mt-4 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-md transition-all">
+                Create Secret Link
+            </button>
+            <p id="create-status" class="text-center mt-4 text-gray-400 h-5"></p>
+        </div>
+
+        <div id="link-view" class="hidden">
+            <h2 class="text-2xl font-bold mb-4 text-white">Your Secret Link is Ready</h2>
+            <p class="mb-4 text-gray-400">Copy this link and send it. Remember, it can only be opened once.</p>
+            <div class="relative">
+                <input id="secret-link" type="text" readonly class="w-full p-3 pr-12 bg-gray-900 border border-gray-600 rounded-md text-green-400">
+                <button id="copy-btn" class="absolute inset-y-0 right-0 px-4 text-gray-400 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                </button>
+            </div>
+             <p id="copy-status" class="text-center mt-4 text-gray-400 h-5"></p>
+            <button id="create-another-btn" class="mt-6 w-full text-indigo-400 hover:text-indigo-300 font-semibold">Create another secret</button>
+        </div>
+
+        <div id="reveal-view" class="hidden">
+            <h2 class="text-2xl font-bold mb-4 text-white">Your Secret Message</h2>
+            <div id="secret-message-container" class="w-full min-h-[10rem] p-4 bg-gray-900 border border-yellow-500 rounded-md text-gray-200 whitespace-pre-wrap break-words">
+                </div>
+            <p class="mt-4 text-sm text-yellow-500">This message has been destroyed. It cannot be viewed again.</p>
+        </div>
+        
+        <div id="error-view" class="hidden">
+             <h2 class="text-2xl font-bold mb-4 text-red-500">Link Expired or Invalid</h2>
+             <p class="mb-6 text-gray-400">The secret you are trying to access may have already been viewed, or the link is incorrect.</p>
+             <button id="error-home-btn" class="mt-4 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-md transition-all">Create a new secret</button>
+        </div>
+    </div>
+
+    <script>
+        const createView = document.getElementById('create-view');
+        const linkView = document.getElementById('link-view');
+        const revealView = document.getElementById('reveal-view');
+        const errorView = document.getElementById('error-view');
+
+        const secretInput = document.getElementById('secret-input');
+        const createBtn = document.getElementById('create-btn');
+        const createStatus = document.getElementById('create-status');
+        
+        const secretLinkInput = document.getElementById('secret-link');
+        const copyBtn = document.getElementById('copy-btn');
+        const copyStatus = document.getElementById('copy-status');
+        const createAnotherBtn = document.getElementById('create-another-btn');
+        
+        const secretMessageContainer = document.getElementById('secret-message-container');
+        const errorHomeBtn = document.getElementById('error-home-btn');
+
+
+        // Function to switch between views
+        const showView = (view) => {
+            createView.classList.add('hidden');
+            linkView.classList.add('hidden');
+            revealView.classList.add('hidden');
+            errorView.classList.add('hidden');
+            view.classList.remove('hidden');
+        };
+
+        // --- Event Listeners ---
+
+        createBtn.addEventListener('click', async () => {
+            const secret = secretInput.value.trim();
+            if (!secret) {
+                createStatus.textContent = 'Please enter a secret.';
+                return;
+            }
+            
+            createBtn.disabled = true;
+            createStatus.textContent = 'Encrypting and generating link...';
+
+            try {
+                const response = await fetch('/api/secret', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ secret }),
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to create secret.');
+                }
+
+                const { id } = await response.json();
+                const link = `${window.location.origin}${window.location.pathname}?id=${id}`;
+                secretLinkInput.value = link;
+                showView(linkView);
+
+            } catch (error) {
+                createStatus.textContent = 'An error occurred. Please try again.';
+                console.error(error);
+            } finally {
+                createBtn.disabled = false;
+                createStatus.textContent = '';
+                secretInput.value = '';
+            }
+        });
+
+        copyBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(secretLinkInput.value).then(() => {
+                copyStatus.textContent = 'Copied to clipboard!';
+                setTimeout(() => { copyStatus.textContent = ''; }, 2000);
+            }).catch(err => {
+                copyStatus.textContent = 'Failed to copy.';
+            });
+        });
+
+        createAnotherBtn.addEventListener('click', () => showView(createView));
+        errorHomeBtn.addEventListener('click', () => {
+            // Clear the URL parameter and show the create view
+            window.history.pushState({}, '', window.location.pathname);
+            showView(createView);
+        });
+
+        // --- On Page Load ---
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            const params = new URLSearchParams(window.location.search);
+            const secretId = params.get('id');
+
+            if (secretId) {
+                showView(revealView); // Show loading state immediately
+                secretMessageContainer.textContent = 'Decrypting secret...';
+
+                try {
+                    const response = await fetch(`/api/secret?id=${secretId}`);
+                    
+                    if (!response.ok) {
+                        if (response.status === 404) {
+                           throw new Error('Not Found');
+                        }
+                        throw new Error('Server error');
+                    }
+                    
+                    const { secret } = await response.json();
+                    secretMessageContainer.textContent = secret;
+
+                } catch (error) {
+                    showView(errorView);
+                }
+            } else {
+                showView(createView);
+            }
+        });
+    </script>
+</body>
+</html>
